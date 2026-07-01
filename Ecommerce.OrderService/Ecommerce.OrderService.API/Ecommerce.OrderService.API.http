@@ -1,0 +1,6 @@
+@Ecommerce.OrderService.API_HostAddress = http://localhost:5166
+
+GET {{Ecommerce.OrderService.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
