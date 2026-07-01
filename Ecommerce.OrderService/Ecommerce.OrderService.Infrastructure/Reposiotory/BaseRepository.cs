@@ -21,7 +21,7 @@ namespace Ecommerce.OrderService.Infrastructure.Reposiotory
             this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public async Task AddAsync(T entity)
+        public  async Task AddAsync(T entity)
         {
             if (entity == null) throw new ArgumentNullException(nameof(entity));
 
@@ -30,6 +30,8 @@ namespace Ecommerce.OrderService.Infrastructure.Reposiotory
                 logger.LogInformation("Adding entity of type {TypeName}", typeof(T).Name);
                 await dbContext.Set<T>().AddAsync(entity);
                 await dbContext.SaveChangesAsync();
+                
+
                 logger.LogInformation("Added entity of type {TypeName}", typeof(T).Name);
             }
             catch (Exception ex)

@@ -1,12 +1,10 @@
 using AutoMapper;
+using Ecommerce.OrderService.Application.DTOs;
+using Ecommerce.OrderService.Application.Events;
 using Ecommerce.OrderService.Application.Interface.IReposiotory;
 using Ecommerce.OrderService.Application.Interface.IService;
-using Ecommerce.OrderService.Application.DTOs;
 using Ecommerce.OrderService.Domain.Model;
 using Microsoft.Extensions.Logging;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace Ecommerce.OrderService.Application.Services
 {
@@ -16,22 +14,25 @@ namespace Ecommerce.OrderService.Application.Services
         private readonly IOrderItemRepository orderItemRepository;
         private readonly IMapper mapper;
         private readonly ILogger<OrderService> logger;
+        private readonly IOrderProducerService orderProducerService;
 
-        public OrderService(IOrderRepository orderRepository, IOrderItemRepository orderItemRepository, IMapper mapper, ILogger<OrderService> logger)
+        public OrderService(IOrderRepository orderRepository, IOrderItemRepository orderItemRepository, IMapper mapper, ILogger<OrderService> logger, IOrderProducerService orderProducerService)
         {
             this.orderRepository = orderRepository;
             this.orderItemRepository = orderItemRepository;
             this.mapper = mapper;
             this.logger = logger;
+            this.orderProducerService = orderProducerService;
         }
 
         public async Task AddAsync(OrderDto orderDto)
         {
+            decimal amount = 0;
             logger.LogInformation("Creating order for user {UserId}", orderDto.UserId);
 
             var order = mapper.Map<Order>(orderDto);
 
-            await orderRepository.AddAsync(order);
+            int orderId = await orderRepository.AddOrder(order);
 
             // map and add items with generated OrderId
             if (orderDto.Items != null && orderDto.Items.Any())
@@ -41,8 +42,12 @@ namespace Ecommerce.OrderService.Application.Services
                     var item = mapper.Map<OrderItem>(itemDto);
                     item.OrderId = order.OrderId;
                     await orderItemRepository.AddAsync(item);
+
+                    amount += itemDto.Price;
                 }
             }
+
+            await PublishOrderMessage(orderId, amount);
 
             logger.LogInformation("Created order {OrderId} for user {UserId}", order.OrderId, order.UserId);
         }
@@ -109,6 +114,7 @@ namespace Ecommerce.OrderService.Application.Services
 
         public async Task UpdateAsync(OrderDto orderDto)
         {
+            decimal amount = 0;
             logger.LogInformation("Updating order {OrderId}", orderDto.OrderId);
 
             var order = await orderRepository.GetByIdAsync(orderDto.OrderId);
@@ -136,10 +142,23 @@ namespace Ecommerce.OrderService.Application.Services
                     var item = mapper.Map<OrderItem>(itemDto);
                     item.OrderId = order.OrderId;
                     await orderItemRepository.AddAsync(item);
+                    amount += itemDto.Price;
                 }
             }
 
+            await PublishOrderMessage(order.OrderId, amount);
             logger.LogInformation("Updated order {OrderId}", orderDto.OrderId);
+        }
+
+
+        private async Task PublishOrderMessage(int OrderId, decimal amount)
+        {
+            OrderCreatedEvent orderCreatedEvent = new OrderCreatedEvent();
+            orderCreatedEvent.OrderId = OrderId;
+            orderCreatedEvent.MessageId = new Guid().ToString();
+            orderCreatedEvent.Amount = amount;
+            orderCreatedEvent.CreatedOn = DateTime.Now;
+            await orderProducerService.PublishAsync(orderCreatedEvent);
         }
     }
 }

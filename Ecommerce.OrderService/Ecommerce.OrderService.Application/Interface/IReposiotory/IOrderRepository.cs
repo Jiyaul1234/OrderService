@@ -4,5 +4,6 @@ namespace Ecommerce.OrderService.Application.Interface.IReposiotory
 {
     public interface IOrderRepository : IBaseReposiotory<Order>
     {
+         Task<int> AddOrder(Order entity);
     }
 }

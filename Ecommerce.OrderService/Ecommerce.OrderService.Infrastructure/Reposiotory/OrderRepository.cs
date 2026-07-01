@@ -6,8 +6,18 @@ namespace Ecommerce.OrderService.Infrastructure.Reposiotory
 {
     public class OrderRepository : BaseRepository<Order>, IOrderRepository
     {
+        private AppDbContext _context;
         public OrderRepository(AppDbContext dbContext, ILogger<OrderRepository> logger) : base(dbContext, logger)
         {
+            _context = dbContext;
         }
+
+        public async  Task<int> AddOrder(Order entity)
+        {
+           await  _context.Set<Order>().AddAsync(entity);
+           await _context.SaveChangesAsync();
+           return entity.OrderId;
+        }
+        
     }
 }
