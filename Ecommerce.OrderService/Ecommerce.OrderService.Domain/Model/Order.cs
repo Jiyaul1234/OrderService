@@ -15,8 +15,12 @@ namespace Ecommerce.OrderService.Domain.Model
         public int UserId { get; set; }
         public DateTime OrderDate { get; set; }
 
-        public int PaymentId { get; set; }
+        public string? PaymentStatus { get; set; }
+        public int? PaymentId { get; set; }
 
-        public int ShippingId { get; set; }
+        public int? ShippingId { get; set; }
+
+        public DateTime CreatedOn { get; set; }
+        public DateTime UpdatedOn { get; set; }
     }
 }

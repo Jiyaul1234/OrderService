@@ -4,6 +4,7 @@ using Ecommerce.OrderService.Application.Events;
 using Ecommerce.OrderService.Application.Interface.IReposiotory;
 using Ecommerce.OrderService.Application.Interface.IService;
 using Ecommerce.OrderService.Domain.Model;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace Ecommerce.OrderService.Application.Services
@@ -14,15 +15,18 @@ namespace Ecommerce.OrderService.Application.Services
         private readonly IOrderItemRepository orderItemRepository;
         private readonly IMapper mapper;
         private readonly ILogger<OrderService> logger;
-        private readonly IOrderProducerService orderProducerService;
-
-        public OrderService(IOrderRepository orderRepository, IOrderItemRepository orderItemRepository, IMapper mapper, ILogger<OrderService> logger, IOrderProducerService orderProducerService)
+        private readonly IKafkaProducer orderProducerService;
+        private readonly IConfiguration _configuration;
+        private readonly string topicName;
+        public OrderService(IOrderRepository orderRepository, IOrderItemRepository orderItemRepository, IMapper mapper, 
+            ILogger<OrderService> logger, IKafkaProducer orderProducerService,IConfiguration configuration)
         {
             this.orderRepository = orderRepository;
             this.orderItemRepository = orderItemRepository;
             this.mapper = mapper;
             this.logger = logger;
             this.orderProducerService = orderProducerService;
+           
         }
 
         public async Task AddAsync(OrderDto orderDto)
@@ -146,19 +150,33 @@ namespace Ecommerce.OrderService.Application.Services
                 }
             }
 
-            await PublishOrderMessage(order.OrderId, amount);
+            await PublishForshipment(order.OrderId);
             logger.LogInformation("Updated order {OrderId}", orderDto.OrderId);
         }
 
 
         private async Task PublishOrderMessage(int OrderId, decimal amount)
         {
+            string topicName = _configuration["Kafka:OrderTopic"].ToString();
             OrderCreatedEvent orderCreatedEvent = new OrderCreatedEvent();
             orderCreatedEvent.OrderId = OrderId;
-            orderCreatedEvent.MessageId = new Guid().ToString();
+            orderCreatedEvent.MessageId =Guid.NewGuid().ToString();
             orderCreatedEvent.Amount = amount;
             orderCreatedEvent.CreatedOn = DateTime.Now;
-            await orderProducerService.PublishAsync(orderCreatedEvent);
+            await orderProducerService.PublishAsync<OrderCreatedEvent>(topicName,orderCreatedEvent);
+        }
+
+        private async Task PublishForshipment(int OrderId)
+        {
+            string topicName = _configuration["Kafka:PaymenConfirmd"].ToString();
+            ShipmentCreatedEvent shipmentCreatedEvent = new ShipmentCreatedEvent()
+            {
+                MessageId= Guid.NewGuid().ToString(),
+                OrderId= OrderId,
+                CreatedOn= DateTime.Now,
+
+            };
+            await orderProducerService.PublishAsync<ShipmentCreatedEvent>(topicName, shipmentCreatedEvent);
         }
     }
 }

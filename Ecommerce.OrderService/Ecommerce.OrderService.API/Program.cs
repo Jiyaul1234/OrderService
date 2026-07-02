@@ -5,6 +5,7 @@ using Ecommerce.OrderService.Application.Interface.IService;
 using Ecommerce.OrderService.Application.Mapping;
 using Ecommerce.OrderService.Application.Services;
 using Ecommerce.OrderService.Infrastructure;
+using Ecommerce.OrderService.Infrastructure.Kafka;
 using Ecommerce.OrderService.Infrastructure.Reposiotory;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -19,25 +20,14 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(connectionString);
 });
 
+builder.Services.AddOpenApi();
+
+// Add Swagger/Swashbuckle
+builder.Services.AddSwaggerGen();
+
 // Register repositories
 
-
-builder.Services.AddSingleton(x =>
-{
-    var configuration = x.GetRequiredService<IConfiguration>();
-
-    return new ServiceBusClient(
-        configuration["AzureServiceBus:ConnectionString"],
-        new ServiceBusClientOptions
-        {
-            RetryOptions =
-            {
-                MaxRetries = 5,
-                Delay = TimeSpan.FromSeconds(2),
-                Mode = ServiceBusRetryMode.Exponential
-            }
-        });
-});
+builder.Services.AddAutoMapper(opt=>opt.AddProfile<MappingProfile>());
 
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IOrderItemRepository, OrderItemRepository>();
@@ -47,7 +37,31 @@ builder.Services.AddScoped<ICatagoryRepository, CatagoryRepository>();
 // Register services
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IProductService, ProductService>();
-builder.Services.AddScoped<IOrderProducerService, OrderProducer>();
+builder.Services.AddScoped<IKafkaProducer, KafkaProducer>();
+
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowSpecificOrigins", policy =>
+    {
+        policy.WithOrigins(
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:5173"
+        )
+        .AllowAnyMethod()
+        .AllowAnyHeader()
+        .AllowCredentials();
+    });
+
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()
+            .AllowAnyMethod()
+            .AllowAnyHeader();
+    });
+});
 
 // Add JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
@@ -85,7 +99,15 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.UseCors("AllowAll");
 }
+
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Ecommerce Auth Service API v1");
+    c.RoutePrefix = string.Empty; // Swagger UI at root
+});
 
 app.UseHttpsRedirection();
 
