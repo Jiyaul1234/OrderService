@@ -32,12 +32,13 @@ builder.Services.AddAutoMapper(opt=>opt.AddProfile<MappingProfile>());
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IOrderItemRepository, OrderItemRepository>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
-builder.Services.AddScoped<ICatagoryRepository, CatagoryRepository>();
 
 // Register services
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<IKafkaProducer, KafkaProducer>();
+builder.Services.AddHostedService<KafkaConsumer>();
+builder.Services.AddHostedService<KafkaShipmentConsumer>();
 
 
 builder.Services.AddCors(options =>

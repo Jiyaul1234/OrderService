@@ -6,6 +6,7 @@ using Ecommerce.OrderService.Application.Interface.IService;
 using Ecommerce.OrderService.Domain.Model;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace Ecommerce.OrderService.Application.Services
 {
@@ -26,17 +27,20 @@ namespace Ecommerce.OrderService.Application.Services
             this.mapper = mapper;
             this.logger = logger;
             this.orderProducerService = orderProducerService;
-           
+            _configuration = configuration;
         }
 
         public async Task AddAsync(OrderDto orderDto)
         {
             decimal amount = 0;
-            logger.LogInformation("Creating order for user {UserId}", orderDto.UserId);
+            logger.LogInformation("Creating order for customer {CustomerId}", orderDto.CustomerId);
 
             var order = mapper.Map<Order>(orderDto);
 
             int orderId = await orderRepository.AddOrder(order);
+
+            // set generated id back to dto
+            orderDto.Id = orderId.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
             // map and add items with generated OrderId
             if (orderDto.Items != null && orderDto.Items.Any())
@@ -47,13 +51,13 @@ namespace Ecommerce.OrderService.Application.Services
                     item.OrderId = order.OrderId;
                     await orderItemRepository.AddAsync(item);
 
-                    amount += itemDto.Price;
+                    amount += itemDto.Price * itemDto.Quantity;
                 }
             }
 
             await PublishOrderMessage(orderId, amount);
 
-            logger.LogInformation("Created order {OrderId} for user {UserId}", order.OrderId, order.UserId);
+            logger.LogInformation("Created order {OrderId} for customer {CustomerId}", order.OrderId, order.UserId);
         }
 
         public async Task<IEnumerable<OrderDto>> GetAllAsync()
@@ -119,15 +123,16 @@ namespace Ecommerce.OrderService.Application.Services
         public async Task UpdateAsync(OrderDto orderDto)
         {
             decimal amount = 0;
-            logger.LogInformation("Updating order {OrderId}", orderDto.OrderId);
+            logger.LogInformation("Updating order {OrderId}", orderDto.Id);
 
-            var order = await orderRepository.GetByIdAsync(orderDto.OrderId);
+            var orderIdInt = int.TryParse(orderDto.Id, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var parsedId) ? parsedId : 0;
+            var order = await orderRepository.GetByIdAsync(orderIdInt);
             if (order == null)
             {
-                logger.LogInformation("Order {OrderId} not found for update", orderDto.OrderId);
+                logger.LogInformation("Order {OrderId} not found for update", orderDto.Id);
                 return;
             }
-
+     
             mapper.Map(orderDto, order);
 
             await orderRepository.Update(order);
@@ -146,12 +151,41 @@ namespace Ecommerce.OrderService.Application.Services
                     var item = mapper.Map<OrderItem>(itemDto);
                     item.OrderId = order.OrderId;
                     await orderItemRepository.AddAsync(item);
-                    amount += itemDto.Price;
+                    amount += itemDto.Price * itemDto.Quantity;
                 }
             }
 
             await PublishForshipment(order.OrderId);
-            logger.LogInformation("Updated order {OrderId}", orderDto.OrderId);
+            logger.LogInformation("Updated order {OrderId}", order.OrderId);
+        }
+
+        private async Task PublishForshipment(int orderId)
+        {
+            var order = await orderRepository.GetByIdAsync(orderId);
+            if (order == null) return;
+
+            string topicName = _configuration["Kafka:PaymentconfirmdTopic"]?.ToString();
+
+            var shippingAddress = string.IsNullOrEmpty(order.ShippingAddressJson)
+                ? new ShippingAddressDto()
+                : JsonSerializer.Deserialize<ShippingAddressDto>(order.ShippingAddressJson)!;
+
+            ShipmentCreatedEvent shipmentCreatedEvent = new ShipmentCreatedEvent()
+            {
+                MessageId = Guid.NewGuid().ToString(),
+                OrderId = order.OrderId,
+                FullName = shippingAddress.FullName,
+                AddressLine1 = shippingAddress.AddressLine1,
+                AddressLine2 = shippingAddress.AddressLine2,
+                City = shippingAddress.City,
+                State = shippingAddress.State,
+                PostalCode = shippingAddress.PostalCode,
+                Country = shippingAddress.Country,
+                PhoneNumber = shippingAddress.PhoneNumber,
+                CreatedOn = DateTime.Now
+            };
+
+            await orderProducerService.PublishAsync<ShipmentCreatedEvent>(topicName, shipmentCreatedEvent);
         }
 
 
@@ -166,17 +200,5 @@ namespace Ecommerce.OrderService.Application.Services
             await orderProducerService.PublishAsync<OrderCreatedEvent>(topicName,orderCreatedEvent);
         }
 
-        private async Task PublishForshipment(int OrderId)
-        {
-            string topicName = _configuration["Kafka:PaymenConfirmd"].ToString();
-            ShipmentCreatedEvent shipmentCreatedEvent = new ShipmentCreatedEvent()
-            {
-                MessageId= Guid.NewGuid().ToString(),
-                OrderId= OrderId,
-                CreatedOn= DateTime.Now,
-
-            };
-            await orderProducerService.PublishAsync<ShipmentCreatedEvent>(topicName, shipmentCreatedEvent);
-        }
     }
 }

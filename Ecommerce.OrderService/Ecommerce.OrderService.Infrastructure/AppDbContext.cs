@@ -15,7 +15,7 @@ namespace Ecommerce.OrderService.Infrastructure
 
         public DbSet<Product> Products { get; set; }
 
-        public DbSet<Catagory> Catagory { get; set; }
+      
 
     }
 }

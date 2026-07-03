@@ -31,7 +31,7 @@ namespace Ecommerce.OrderService.Application.Services
 
             await productRepository.AddAsync(product);
 
-            logger.LogInformation("Added product {ProductId}", product.ProductId);
+            logger.LogInformation("Added product {ProductId}", product.Id);
         }
 
         public async Task<IEnumerable<ProductDto>> GetAllAsync()
@@ -80,12 +80,12 @@ namespace Ecommerce.OrderService.Application.Services
 
         public async Task UpdateAsync(ProductDto productDto)
         {
-            logger.LogInformation("Updating product {ProductId}", productDto.ProductId);
+            logger.LogInformation("Updating product {ProductId}", productDto.Id);
 
-            var p = await productRepository.GetByIdAsync(productDto.ProductId);
+            var p = await productRepository.GetByIdAsync(productDto.Id);
             if (p == null)
             {
-                logger.LogInformation("Product {ProductId} not found for update", productDto.ProductId);
+                logger.LogInformation("Product {ProductId} not found for update", productDto.Id);
                 return;
             }
 
@@ -93,7 +93,7 @@ namespace Ecommerce.OrderService.Application.Services
 
             await productRepository.Update(p);
 
-            logger.LogInformation("Updated product {ProductId}", productDto.ProductId);
+            logger.LogInformation("Updated product {ProductId}", productDto.    Id);
         }
     }
 }

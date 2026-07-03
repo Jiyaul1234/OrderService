@@ -18,6 +18,18 @@ namespace Ecommerce.OrderService.API.Controllers
             this.logger = logger;
         }
 
+        // GET: api/products
+        [HttpGet]
+        public async Task<IActionResult> GetAll()
+        {
+            logger.LogInformation("Received request to get all products");
+
+            var dtos = await productService.GetAllAsync();
+
+            logger.LogInformation("Returning products (count may vary)");
+            return Ok(dtos);
+        }
+
         // GET: api/products/{id}
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)

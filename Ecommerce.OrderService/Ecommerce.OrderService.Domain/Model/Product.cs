@@ -1,20 +1,23 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Text;
 
 namespace Ecommerce.OrderService.Domain.Model
 {
     [Table("Product")]
-    public  class Product
+    public class Product
     {
         [Key]
-        public int ProductId { get; set; }
-        public string Name { get; set; }
-        [ForeignKey("CategoryId")]
-        public int CategoryId { get; set; }
+        public int Id { get; set; } 
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
         public decimal Price { get; set; }
-        public int StockQuantity { get; set; }
+        public string Image { get; set; } = string.Empty;
+        public string Category { get; set; } = string.Empty;
+        public double Rating { get; set; }
+        public int Reviews { get; set; }
+        public int Stock { get; set; }
+        public bool InStock { get; set; }
+        public decimal? Discount { get; set; }
+        public decimal? DiscountedPrice { get; set; }
     }
 }

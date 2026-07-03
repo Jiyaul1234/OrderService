@@ -1,11 +1,14 @@
 ﻿using Confluent.Kafka;
 using Ecommerce.OrderService.Application.DTOs;
 using Ecommerce.OrderService.Application.Events;
+using Ecommerce.OrderService.Application.Interface.IReposiotory;
 using Ecommerce.OrderService.Application.Interface.IService;
+using Ecommerce.OrderService.Domain.Model;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using System;
 using System.Text.Json;
 
 namespace Ecommerce.OrderService.Infrastructure.Kafka
@@ -16,6 +19,7 @@ namespace Ecommerce.OrderService.Infrastructure.Kafka
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<KafkaConsumer> _logger;
         private IConsumer<string, string>? _consumer;
+       
         private CancellationTokenSource? _cts;
         private Task? _consumerTask;
 
@@ -91,26 +95,28 @@ namespace Ecommerce.OrderService.Infrastructure.Kafka
                             try { _consumer.Commit(result); } catch { }
                             continue;
                         }
-
-                        var orderDto = new OrderDto
-                        {
-                            PaymentId = payment.PaymentId,
-                            UpdatedOn = DateTime.Now,
-                            PaymentStatus = payment.Status
-
-                        };
+             
                         try
                         {
                             using var scope = _scopeFactory.CreateScope();
-                            var orderService = scope.ServiceProvider.GetRequiredService<IOrderService>();
-                            await orderService.UpdateAsync(orderDto);
+                            var orderRepository = scope.ServiceProvider.GetRequiredService<IOrderRepository>();
+                            var kafkaProducer = scope.ServiceProvider.GetRequiredService<IKafkaProducer>();
+                            var order = await orderRepository.GetByIdAsync(payment.OrderId);
+                            order.UpdatedOn = DateTime.Now;
+                            order.PaymentStatus = payment.Status;
+                            await orderRepository.Update(order);
+                            // publish shipment event
+                            if (payment.Status == "Succeeded")
+                            {
+                                await publishToshipMent(order);
+                            }
                             // commit only after successful processing
                             _consumer.Commit(result);
                             _logger.LogInformation("Processed and committed message offset {Offset}", result.Offset);
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogError(ex, "Error processing payment for OrderId {OrderId}. Leaving offset uncommitted for retry.", orderDto.OrderId);
+                            _logger.LogError(ex, "Error processing payment for OrderId {OrderId}. Leaving offset uncommitted for retry.", payment.OrderId);
                             // Do not commit; message will be re-delivered according to Kafka consumer group semantics
                         }
                     }
@@ -160,6 +166,31 @@ namespace Ecommerce.OrderService.Infrastructure.Kafka
         {
             _consumer?.Dispose();
             _cts?.Dispose();
+        }
+
+
+        private async Task publishToshipMent(Order order)
+        {
+            string topicName = _configuration["Kafka:PaymentconfirmdTopic"]?.ToString() ?? _configuration["Kafka:PaymentconfirmdTopic"];
+           var  ShippingAddress= JsonSerializer.Deserialize<ShippingAddressDto>(order.ShippingAddressJson);
+            var shipmentCreatedEvent = new ShipmentCreatedEvent
+            {
+                OrderId = order.OrderId,
+                CreatedOn = DateTime.Now,
+                FullName = ShippingAddress?.FullName ?? string.Empty,
+                AddressLine1= ShippingAddress?.AddressLine1 ?? string.Empty,
+                AddressLine2= ShippingAddress?.AddressLine2 ?? string.Empty,
+                City= ShippingAddress?.City ?? string.Empty,
+                Country= ShippingAddress?.Country ?? string.Empty,
+                PostalCode= ShippingAddress?.PostalCode ?? string.Empty,
+                PhoneNumber= ShippingAddress?.PhoneNumber ?? string.Empty,
+                MessageId=Guid.NewGuid().ToString(),
+                State= ShippingAddress?.State ?? string.Empty
+          
+            };
+             var  scoped=  _scopeFactory.CreateScope();
+            var producer = scoped.ServiceProvider.GetRequiredService<IKafkaProducer>();
+            await producer.PublishAsync<ShipmentCreatedEvent>(topicName, shipmentCreatedEvent);
         }
     }
 }

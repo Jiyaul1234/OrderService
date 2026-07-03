@@ -1,5 +1,6 @@
 using Ecommerce.OrderService.Application.DTOs;
 using Ecommerce.OrderService.Application.Interface.IService;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
@@ -27,14 +28,15 @@ namespace Ecommerce.OrderService.API.Controllers
             if (orderDto == null)
                 return BadRequest();
 
-            logger.LogInformation("Received request to create order for user {UserId}", orderDto.UserId);
+            logger.LogInformation("Received request to create order for customer {CustomerId}", orderDto.CustomerId);
 
             await orderService.AddAsync(orderDto);
 
-            logger.LogInformation("Order create request processed for user {UserId}", orderDto.UserId);
+            logger.LogInformation("Order create request processed for customer {CustomerId}", orderDto.CustomerId);
 
-            // return created with location to GetById
-            return CreatedAtAction(nameof(GetById), new { id = orderDto.OrderId }, orderDto);
+            // return created with location to GetById (OrderDto.Id is string representation of DB id)
+            int createdId = int.TryParse(orderDto.Id, out var pid) ? pid : 0;
+            return CreatedAtAction(nameof(GetById), new { id = createdId }, orderDto);
         }
 
         // GET: api/orders/{id}
@@ -64,10 +66,10 @@ namespace Ecommerce.OrderService.API.Controllers
             if (dto == null) return NotFound();
 
             string status;
-            // simple status derivation
-            if (dto.PaymentId == 0)
+            // simple status derivation based on payment and shipment status
+            if (string.Equals(dto.PaymentStatus, "pending", StringComparison.OrdinalIgnoreCase))
                 status = "PendingPayment";
-            else if (dto.ShippingId == 0)
+            else if (string.Equals(dto.ShipmentStatus, "pending", StringComparison.OrdinalIgnoreCase))
                 status = "Processing";
             else
                 status = "Completed";
