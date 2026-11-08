@@ -9,6 +9,7 @@ namespace Ecommerce.OrderService.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class OrdersController : ControllerBase
     {
         private readonly IOrderService orderService;

@@ -1,11 +1,12 @@
 using AutoMapper;
 using Azure.Messaging.ServiceBus;
+using Azure.Identity;
 using Ecommerce.OrderService.Application.Interface.IReposiotory;
 using Ecommerce.OrderService.Application.Interface.IService;
 using Ecommerce.OrderService.Application.Mapping;
 using Ecommerce.OrderService.Application.Services;
 using Ecommerce.OrderService.Infrastructure;
-using Ecommerce.OrderService.Infrastructure.Kafka;
+using Ecommerce.OrderService.Infrastructure.BusService;
 using Ecommerce.OrderService.Infrastructure.Reposiotory;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -34,11 +35,34 @@ builder.Services.AddScoped<IOrderItemRepository, OrderItemRepository>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 
 // Register services
-builder.Services.AddScoped<IOrderService, OrderService>();
+//builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IProductService, ProductService>();
-builder.Services.AddScoped<IKafkaProducer, KafkaProducer>();
-builder.Services.AddHostedService<KafkaConsumer>();
-builder.Services.AddHostedService<KafkaShipmentConsumer>();
+// Configure Azure Service Bus
+var sbConnection = builder.Configuration["AzureServiceBus:ConnectionString"];
+if (string.IsNullOrWhiteSpace(sbConnection))
+{
+    // In production prefer DefaultAzureCredential with FullyQualifiedNamespace. For local dev a connection string may be provided.
+    var fqns = builder.Configuration["AzureServiceBus:FullyQualifiedNamespace"]; // optional
+    if (!string.IsNullOrWhiteSpace(fqns))
+    {
+        // use Managed Identity if available (DefaultAzureCredential will be resolved at runtime)
+        var credential = new Azure.Identity.DefaultAzureCredential();
+        builder.Services.AddSingleton(_ => new ServiceBusClient(fqns, credential));
+    }
+    else
+    {
+        // No connection configured; do not register ServiceBusClient
+    }
+}
+else
+{
+    builder.Services.AddSingleton(_ => new ServiceBusClient(sbConnection));
+}
+
+// Register Service Bus producer and processors
+builder.Services.AddScoped<IserviceBusProducer, AzureServiceBusProducer>();
+builder.Services.AddHostedService<ServiceBusPaymentProcessor>();
+builder.Services.AddHostedService<ServiceBusShipmentProcessor>();
 
 
 builder.Services.AddCors(options =>

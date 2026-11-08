@@ -25,13 +25,26 @@ namespace Ecommerce.OrderService.Application.Services
 
         public async Task AddAsync(ProductDto productDto)
         {
+            if (productDto == null)
+            {
+                logger.LogWarning("Received null product DTO for creation");
+                throw new ArgumentNullException(nameof(productDto));
+            }
+
+            if (string.IsNullOrWhiteSpace(productDto.Name) || string.IsNullOrWhiteSpace(productDto.Category))
+            {
+                logger.LogWarning("Product creation with missing fields: Name={Name}, Category={Category}", 
+                    string.IsNullOrWhiteSpace(productDto.Name) ? "missing" : "provided",
+                    string.IsNullOrWhiteSpace(productDto.Category) ? "missing" : "provided");
+            }
+
             logger.LogInformation("Adding product {ProductName}", productDto.Name);
 
             var product = mapper.Map<Product>(productDto);
 
             await productRepository.AddAsync(product);
 
-            logger.LogInformation("Added product {ProductId}", product.Id);
+            logger.LogInformation("Added product {ProductId} with price {Price}", product.Id, product.Price);
         }
 
         public async Task<IEnumerable<ProductDto>> GetAllAsync()
@@ -52,13 +65,13 @@ namespace Ecommerce.OrderService.Application.Services
             var p = await productRepository.GetByIdAsync(id);
             if (p == null)
             {
-                logger.LogInformation("Product {ProductId} not found", id);
+                logger.LogWarning("Product {ProductId} not found", id);
                 return null;
             }
 
             var dto = mapper.Map<ProductDto>(p);
 
-            logger.LogInformation("Found product {ProductId}", id);
+            logger.LogInformation("Found product {ProductId} with stock {Stock}", id, p.Stock);
             return dto;
         }
 
@@ -69,8 +82,13 @@ namespace Ecommerce.OrderService.Application.Services
             var p = await productRepository.GetByIdAsync(id);
             if (p == null)
             {
-                logger.LogInformation("Product {ProductId} not found for removal", id);
+                logger.LogWarning("Product {ProductId} not found for removal", id);
                 return;
+            }
+
+            if (p.Stock > 0)
+            {
+                logger.LogWarning("Removing product {ProductId} with stock remaining: {Stock}", id, p.Stock);
             }
 
             await productRepository.Remove(p);
@@ -85,15 +103,32 @@ namespace Ecommerce.OrderService.Application.Services
             var p = await productRepository.GetByIdAsync(productDto.Id);
             if (p == null)
             {
-                logger.LogInformation("Product {ProductId} not found for update", productDto.Id);
+                logger.LogWarning("Product {ProductId} not found for update", productDto.Id);
                 return;
             }
 
+            var oldPrice = p.Price;
+            var oldStock = p.Stock;
+            var oldDiscount = p.Discount;
+
             mapper.Map(productDto, p);
+
+            if (oldPrice != p.Price)
+            {
+                logger.LogInformation("Product {ProductId} price changed: {OldPrice} -> {NewPrice}", productDto.Id, oldPrice, p.Price);
+            }
+            if (oldStock != p.Stock)
+            {
+                logger.LogInformation("Product {ProductId} stock changed: {OldStock} -> {NewStock}", productDto.Id, oldStock, p.Stock);
+            }
+            if (oldDiscount != p.Discount)
+            {
+                logger.LogInformation("Product {ProductId} discount changed: {OldDiscount} -> {NewDiscount}", productDto.Id, oldDiscount, p.Discount);
+            }
 
             await productRepository.Update(p);
 
-            logger.LogInformation("Updated product {ProductId}", productDto.    Id);
+            logger.LogInformation("Updated product {ProductId}", productDto.Id);
         }
     }
 }

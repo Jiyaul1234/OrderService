@@ -16,11 +16,11 @@ namespace Ecommerce.OrderService.Application.Services
         private readonly IOrderItemRepository orderItemRepository;
         private readonly IMapper mapper;
         private readonly ILogger<OrderService> logger;
-        private readonly IKafkaProducer orderProducerService;
+        private readonly IserviceBusProducer orderProducerService;
         private readonly IConfiguration _configuration;
         private readonly string topicName;
         public OrderService(IOrderRepository orderRepository, IOrderItemRepository orderItemRepository, IMapper mapper, 
-            ILogger<OrderService> logger, IKafkaProducer orderProducerService,IConfiguration configuration)
+            ILogger<OrderService> logger, IserviceBusProducer orderProducerService,IConfiguration configuration)
         {
             this.orderRepository = orderRepository;
             this.orderItemRepository = orderItemRepository;
@@ -33,6 +33,13 @@ namespace Ecommerce.OrderService.Application.Services
         public async Task AddAsync(OrderDto orderDto)
         {
             decimal amount = 0;
+
+            if (orderDto == null)
+            {
+                logger.LogWarning("Received null order DTO for creation");
+                throw new ArgumentNullException(nameof(orderDto));
+            }
+
             logger.LogInformation("Creating order for customer {CustomerId}", orderDto.CustomerId);
 
             var order = mapper.Map<Order>(orderDto);
@@ -53,11 +60,23 @@ namespace Ecommerce.OrderService.Application.Services
 
                     amount += itemDto.Price * itemDto.Quantity;
                 }
+                logger.LogInformation("Order {OrderId} created with {ItemCount} items for customer {CustomerId}", orderId, orderDto.Items.Count, orderDto.CustomerId);
+            }
+            else
+            {
+                logger.LogWarning("Order {OrderId} created with no items for customer {CustomerId}", orderId, orderDto.CustomerId);
             }
 
-            await PublishOrderMessage(orderId, amount);
-
-            logger.LogInformation("Created order {OrderId} for customer {CustomerId}", order.OrderId, order.UserId);
+            try
+            {
+                await PublishOrderMessage(orderId, amount);
+                logger.LogInformation("Created order {OrderId} for customer {CustomerId}", orderId, order.UserId);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to publish order message for order {OrderId}", orderId);
+                throw;
+            }
         }
 
         public async Task<IEnumerable<OrderDto>> GetAllAsync()
@@ -86,7 +105,7 @@ namespace Ecommerce.OrderService.Application.Services
             var o = await orderRepository.GetByIdAsync(id);
             if (o == null)
             {
-                logger.LogInformation("Order {OrderId} not found", id);
+                logger.LogWarning("Order {OrderId} not found", id);
                 return null;
             }
 
@@ -105,7 +124,7 @@ namespace Ecommerce.OrderService.Application.Services
             var order = await orderRepository.GetByIdAsync(id);
             if (order == null)
             {
-                logger.LogInformation("Order {OrderId} not found for removal", id);
+                logger.LogWarning("Order {OrderId} not found for removal", id);
                 return;
             }
 
@@ -117,7 +136,7 @@ namespace Ecommerce.OrderService.Application.Services
 
             await orderRepository.Remove(order);
 
-            logger.LogInformation("Removed order {OrderId}", id);
+            logger.LogInformation("Removed order {OrderId} and {ItemCount} related items", id, items.Count());
         }
 
         public async Task UpdateAsync(OrderDto orderDto)
@@ -129,13 +148,31 @@ namespace Ecommerce.OrderService.Application.Services
             var order = await orderRepository.GetByIdAsync(orderIdInt);
             if (order == null)
             {
-                logger.LogInformation("Order {OrderId} not found for update", orderDto.Id);
+                logger.LogWarning("Order {OrderId} not found for update", orderDto.Id);
                 return;
             }
-     
+
+            var oldStatus = order.OrderStatus;
+            var oldPaymentStatus = order.PaymentStatus;
+            var oldShipmentStatus = order.ShipmentStatus;
+
             mapper.Map(orderDto, order);
 
             await orderRepository.Update(order);
+
+            // Log state transitions
+            if (oldStatus != order.OrderStatus)
+            {
+                logger.LogInformation("Order {OrderId} status transitioned: {OldStatus} -> {NewStatus}", orderIdInt, oldStatus, order.OrderStatus);
+            }
+            if (oldPaymentStatus != order.PaymentStatus)
+            {
+                logger.LogInformation("Order {OrderId} payment status changed: {OldPaymentStatus} -> {NewPaymentStatus}", orderIdInt, oldPaymentStatus, order.PaymentStatus);
+            }
+            if (oldShipmentStatus != order.ShipmentStatus)
+            {
+                logger.LogInformation("Order {OrderId} shipment status changed: {OldShipmentStatus} -> {NewShipmentStatus}", orderIdInt, oldShipmentStatus, order.ShipmentStatus);
+            }
 
             // naive item sync: delete existing and add incoming
             var existingItems = await orderItemRepository.FindAsync(i => i.OrderId == order.OrderId);
@@ -155,7 +192,17 @@ namespace Ecommerce.OrderService.Application.Services
                 }
             }
 
-            await PublishForshipment(order.OrderId);
+            try
+            {
+                await PublishForshipment(order.OrderId);
+                logger.LogInformation("Order {OrderId} sent for shipment", order.OrderId);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to publish shipment event for order {OrderId}", order.OrderId);
+                throw;
+            }
+
             logger.LogInformation("Updated order {OrderId}", order.OrderId);
         }
 
