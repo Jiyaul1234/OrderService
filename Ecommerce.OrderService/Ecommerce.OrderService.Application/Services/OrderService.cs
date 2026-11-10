@@ -32,9 +32,11 @@ namespace Ecommerce.OrderService.Application.Services
 
         public async Task AddAsync(OrderDto orderDto)
         {
-            decimal amount = 0;
 
-            if (orderDto == null)
+            try
+            {
+
+            if (orderDto is null)
             {
                 logger.LogWarning("Received null order DTO for creation");
                 throw new ArgumentNullException(nameof(orderDto));
@@ -52,29 +54,22 @@ namespace Ecommerce.OrderService.Application.Services
             // map and add items with generated OrderId
             if (orderDto.Items != null && orderDto.Items.Any())
             {
-                foreach (var itemDto in orderDto.Items)
-                {
-                    var item = mapper.Map<OrderItem>(itemDto);
-                    item.OrderId = order.OrderId;
-                    await orderItemRepository.AddAsync(item);
+                var items = mapper.Map<List<OrderItem>>(orderDto.Items);
+                    items.ForEach(x => x.OrderId = orderId);
+                   await orderItemRepository.AddRange(items);
 
-                    amount += itemDto.Price * itemDto.Quantity;
-                }
-                logger.LogInformation("Order {OrderId} created with {ItemCount} items for customer {CustomerId}", orderId, orderDto.Items.Count, orderDto.CustomerId);
+                  logger.LogInformation("Order {OrderId} created with {ItemCount} items for customer {CustomerId}", orderId, orderDto.Items.Count, orderDto.CustomerId);
             }
             else
             {
                 logger.LogWarning("Order {OrderId} created with no items for customer {CustomerId}", orderId, orderDto.CustomerId);
-            }
-
-            try
-            {
-                await PublishOrderMessage(orderId, amount);
+            }        
+                //await PublishOrderMessage(orderId, amount);
                 logger.LogInformation("Created order {OrderId} for customer {CustomerId}", orderId, order.UserId);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to publish order message for order {OrderId}", orderId);
+                logger.LogError(ex,$"Failed to place order orderDetails: {orderDto}");
                 throw;
             }
         }
@@ -139,101 +134,72 @@ namespace Ecommerce.OrderService.Application.Services
             logger.LogInformation("Removed order {OrderId} and {ItemCount} related items", id, items.Count());
         }
 
-        public async Task UpdateAsync(OrderDto orderDto)
-        {
-            decimal amount = 0;
-            logger.LogInformation("Updating order {OrderId}", orderDto.Id);
+        //public async Task UpdateAsync(OrderDto orderDto)
+        //{
+        //    decimal amount = 0;
+        //    logger.LogInformation("Updating order {OrderId}", orderDto.Id);
 
-            var orderIdInt = int.TryParse(orderDto.Id, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var parsedId) ? parsedId : 0;
-            var order = await orderRepository.GetByIdAsync(orderIdInt);
-            if (order == null)
-            {
-                logger.LogWarning("Order {OrderId} not found for update", orderDto.Id);
-                return;
-            }
+        //    var orderIdInt = int.TryParse(orderDto.Id, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var parsedId) ? parsedId : 0;
+        //    var order = await orderRepository.GetByIdAsync(orderIdInt);
+        //    if (order == null)
+        //    {
+        //        logger.LogWarning("Order {OrderId} not found for update", orderDto.Id);
+        //        return;
+        //    }
 
-            var oldStatus = order.OrderStatus;
-            var oldPaymentStatus = order.PaymentStatus;
-            var oldShipmentStatus = order.ShipmentStatus;
+        //    var oldStatus = order.OrderStatus;
+        //    var oldPaymentStatus = order.PaymentStatus;
+        //    var oldShipmentStatus = order.ShipmentStatus;
 
-            mapper.Map(orderDto, order);
+        //    mapper.Map(orderDto, order);
 
-            await orderRepository.Update(order);
+        //    await orderRepository.Update(order);
 
-            // Log state transitions
-            if (oldStatus != order.OrderStatus)
-            {
-                logger.LogInformation("Order {OrderId} status transitioned: {OldStatus} -> {NewStatus}", orderIdInt, oldStatus, order.OrderStatus);
-            }
-            if (oldPaymentStatus != order.PaymentStatus)
-            {
-                logger.LogInformation("Order {OrderId} payment status changed: {OldPaymentStatus} -> {NewPaymentStatus}", orderIdInt, oldPaymentStatus, order.PaymentStatus);
-            }
-            if (oldShipmentStatus != order.ShipmentStatus)
-            {
-                logger.LogInformation("Order {OrderId} shipment status changed: {OldShipmentStatus} -> {NewShipmentStatus}", orderIdInt, oldShipmentStatus, order.ShipmentStatus);
-            }
+        //    // Log state transitions
+        //    if (oldStatus != order.OrderStatus)
+        //    {
+        //        logger.LogInformation("Order {OrderId} status transitioned: {OldStatus} -> {NewStatus}", orderIdInt, oldStatus, order.OrderStatus);
+        //    }
+        //    if (oldPaymentStatus != order.PaymentStatus)
+        //    {
+        //        logger.LogInformation("Order {OrderId} payment status changed: {OldPaymentStatus} -> {NewPaymentStatus}", orderIdInt, oldPaymentStatus, order.PaymentStatus);
+        //    }
+        //    if (oldShipmentStatus != order.ShipmentStatus)
+        //    {
+        //        logger.LogInformation("Order {OrderId} shipment status changed: {OldShipmentStatus} -> {NewShipmentStatus}", orderIdInt, oldShipmentStatus, order.ShipmentStatus);
+        //    }
 
-            // naive item sync: delete existing and add incoming
-            var existingItems = await orderItemRepository.FindAsync(i => i.OrderId == order.OrderId);
-            foreach (var it in existingItems)
-            {
-                await orderItemRepository.Remove(it);
-            }
+        //    // naive item sync: delete existing and add incoming
+        //    var existingItems = await orderItemRepository.FindAsync(i => i.OrderId == order.OrderId);
+        //    foreach (var it in existingItems)
+        //    {
+        //        await orderItemRepository.Remove(it);
+        //    }
 
-            if (orderDto.Items != null && orderDto.Items.Any())
-            {
-                foreach (var itemDto in orderDto.Items)
-                {
-                    var item = mapper.Map<OrderItem>(itemDto);
-                    item.OrderId = order.OrderId;
-                    await orderItemRepository.AddAsync(item);
-                    amount += itemDto.Price * itemDto.Quantity;
-                }
-            }
+        //    if (orderDto.Items != null && orderDto.Items.Any())
+        //    {
+        //        foreach (var itemDto in orderDto.Items)
+        //        {
+        //            var item = mapper.Map<OrderItem>(itemDto);
+        //            item.OrderId = order.OrderId;
+        //            await orderItemRepository.AddAsync(item);
+        //            amount += itemDto.Price * itemDto.Quantity;
+        //        }
+        //    }
 
-            try
-            {
-                await PublishForshipment(order.OrderId);
-                logger.LogInformation("Order {OrderId} sent for shipment", order.OrderId);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to publish shipment event for order {OrderId}", order.OrderId);
-                throw;
-            }
+        //    try
+        //    {
+        //        await PublishForshipment(order.OrderId);
+        //        logger.LogInformation("Order {OrderId} sent for shipment", order.OrderId);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        logger.LogError(ex, "Failed to publish shipment event for order {OrderId}", order.OrderId);
+        //        throw;
+        //    }
 
-            logger.LogInformation("Updated order {OrderId}", order.OrderId);
-        }
-
-        private async Task PublishForshipment(int orderId)
-        {
-            var order = await orderRepository.GetByIdAsync(orderId);
-            if (order == null) return;
-
-            string topicName = _configuration["Kafka:PaymentconfirmdTopic"]?.ToString();
-
-            var shippingAddress = string.IsNullOrEmpty(order.ShippingAddressJson)
-                ? new ShippingAddressDto()
-                : JsonSerializer.Deserialize<ShippingAddressDto>(order.ShippingAddressJson)!;
-
-            ShipmentCreatedEvent shipmentCreatedEvent = new ShipmentCreatedEvent()
-            {
-                MessageId = Guid.NewGuid().ToString(),
-                OrderId = order.OrderId,
-                FullName = shippingAddress.FullName,
-                AddressLine1 = shippingAddress.AddressLine1,
-                AddressLine2 = shippingAddress.AddressLine2,
-                City = shippingAddress.City,
-                State = shippingAddress.State,
-                PostalCode = shippingAddress.PostalCode,
-                Country = shippingAddress.Country,
-                PhoneNumber = shippingAddress.PhoneNumber,
-                CreatedOn = DateTime.Now
-            };
-
-            await orderProducerService.PublishAsync<ShipmentCreatedEvent>(topicName, shipmentCreatedEvent);
-        }
+        //    logger.LogInformation("Updated order {OrderId}", order.OrderId);
+        //}
 
 
         private async Task PublishOrderMessage(int OrderId, decimal amount)

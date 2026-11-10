@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text;
+using Ecommerce.OrderService.Domain.Enums;
 
 namespace Ecommerce.OrderService.Domain.Model
 {
@@ -31,8 +32,8 @@ namespace Ecommerce.OrderService.Domain.Model
         public string PaymentMethod { get; set; } = string.Empty;
         public string? PaymentStatus { get; set; }
 
-        public string OrderStatus { get; set; } = "pending";
-        public string ShipmentStatus { get; set; } = "pending";
+        public string OrderStatus { get; set; } = OrderStatusEnum.Pending.ToString();
+        public string ShipmentStatus { get; set; } = ShipmentStatusEnum.Pending.ToString();
         public string? TrackingNumber { get; set; }
 
         public DateTime EstimatedDeliveryDate { get; set; }

@@ -1,3 +1,5 @@
+using Ecommerce.OrderService.Application.Common.Extensions;
+using Ecommerce.OrderService.Domain.Enums;
 using System;
 using System.Collections.Generic;
 
@@ -27,9 +29,9 @@ namespace Ecommerce.OrderService.Application.DTOs
         public decimal GrandTotal { get; set; }
         public ShippingAddressDto ShippingAddress { get; set; } = new ShippingAddressDto();
         public string PaymentMethod { get; set; } = string.Empty;
-        public string PaymentStatus { get; set; } = "pending";
-        public string OrderStatus { get; set; } = "pending";
-        public string ShipmentStatus { get; set; } = "pending";
+        public string PaymentStatus { get; set; } = PaymentStatusEnum.Pending.GetDescription();
+        public string OrderStatus { get; set; } = OrderStatusEnum.Pending.GetDescription();
+        public string ShipmentStatus { get; set; } = ShipmentStatusEnum.Pending.GetDescription();
         public string? TrackingNumber { get; set; }
         public DateTime EstimatedDeliveryDate { get; set; }
         public DateTime CreatedAt { get; set; }

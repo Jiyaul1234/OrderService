@@ -1,5 +1,6 @@
 using Ecommerce.OrderService.Application.DTOs;
 using Ecommerce.OrderService.Application.Interface.IService;
+using Ecommerce.OrderService.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -68,12 +69,12 @@ namespace Ecommerce.OrderService.API.Controllers
 
             string status;
             // simple status derivation based on payment and shipment status
-            if (string.Equals(dto.PaymentStatus, "pending", StringComparison.OrdinalIgnoreCase))
-                status = "PendingPayment";
-            else if (string.Equals(dto.ShipmentStatus, "pending", StringComparison.OrdinalIgnoreCase))
-                status = "Processing";
+            if (string.Equals(dto.PaymentStatus, PaymentStatusEnum.Pending.ToString(), StringComparison.OrdinalIgnoreCase))
+                status = OrderSummaryStatusEnum.PendingPayment.ToString();
+            else if (string.Equals(dto.ShipmentStatus, ShipmentStatusEnum.Pending.ToString(), StringComparison.OrdinalIgnoreCase))
+                status = OrderSummaryStatusEnum.Processing.ToString();
             else
-                status = "Completed";
+                status = OrderSummaryStatusEnum.Completed.ToString();
 
             logger.LogInformation("Order {OrderId} status: {Status}", id, status);
             return Ok(new { OrderId = id, Status = status });

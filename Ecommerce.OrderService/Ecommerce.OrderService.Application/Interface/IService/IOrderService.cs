@@ -10,7 +10,7 @@ namespace Ecommerce.OrderService.Application.Interface.IService
         Task<OrderDto?> GetByIdAsync(int id);
         Task<IEnumerable<OrderDto>> GetAllAsync();
         Task AddAsync(OrderDto order);
-        Task UpdateAsync(OrderDto order);
+        //Task UpdateAsync(OrderDto order);
         Task RemoveAsync(int id);
     }
 }
